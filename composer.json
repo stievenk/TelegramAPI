@@ -1,0 +1,22 @@
+{
+    "name": "koyabu/telegramapi",
+    "description": "Telegram API Client",
+    "version": "1.0.0",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Koyabu\\TelegramAPI\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Stieven Kalengkian",
+            "email": "stieven.kalengkian@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "require": {
+        "guzzlehttp/guzzle" : "^7.5"
+    }
+}
