@@ -28,22 +28,20 @@ class Telegram {
         ]);
     }
 
+    protected function escapeMarkdownV2(string $text): string {
+        // karakter yang harus di-escape di MarkdownV2 menurut doc Telegram
+        $chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!'];
+        $escaped = str_replace($chars, array_map(function($c){ return '\\'.$c; }, $chars), $text);
+        return $escaped;
+    }
+
     private function request($method, $params = [], $multipart = false) {
         try {
             $options = [];
 
             if ($multipart) {
-                $form = [];
-                foreach ($params as $key => $value) {
-                    if (is_array($value)) {
-                        foreach ($value as $v) {
-                            $form[] = ['name' => $key.'[]', 'contents' => $v];
-                        }
-                    } else {
-                        $form[] = ['name' => $key, 'contents' => $value];
-                    }
-                }
-                $options['multipart'] = $form;
+                // jika $params sudah berupa multipart array, kirim langsung
+                $options['multipart'] = $params;
             } else {
                 $options['form_params'] = $params;
             }
@@ -52,6 +50,28 @@ class Telegram {
             return json_decode($response->getBody()->getContents(), true);
 
         } catch (RequestException $e) {
+            $responseBody = null;
+            if ($e->hasResponse()) {
+                $responseBody = (string)$e->getResponse()->getBody();
+            }
+
+            // jika error terkait parse entities, coba ulang tanpa parse_mode
+            if (is_string($responseBody) && stripos($responseBody, "can't parse entities") !== false) {
+                // jika sebelumnya ada parse_mode di form_params, hapus dan retry
+                if (!$multipart && isset($params['parse_mode'])) {
+                    unset($params['parse_mode']);
+                    try {
+                        $retryOptions = ['form_params' => $params];
+                        $retryResp = $this->client->post($method, $retryOptions);
+                        return json_decode($retryResp->getBody()->getContents(), true);
+                    } catch (RequestException $e2) {
+                        // jika masih error, turunkan exception asli (biar debugging lebih jelas)
+                        throw new Exception($e2->getMessage());
+                    }
+                }
+            }
+
+            // selain kasus di atas, lempar kembali exception asli
             throw new Exception($e->getMessage());
         }
     }
@@ -82,12 +102,21 @@ class Telegram {
         }
     }
 
-    public function sendMessage($chat_id, $text, $parse_mode = 'Markdown') {
-        return $this->request('sendMessage', [
+    public function sendMessage($chat_id, $text, $parse_mode = null, $escape_markdown_v2 = false) {
+        if ($escape_markdown_v2 && $parse_mode === 'MarkdownV2') {
+            $text = $this->escapeMarkdownV2($text);
+        }
+
+        $params = [
             'chat_id' => $chat_id,
             'text' => $text,
-            'parse_mode' => $parse_mode
-        ]);
+        ];
+
+        if (!empty($parse_mode)) {
+            $params['parse_mode'] = $parse_mode;
+        }
+
+        return $this->request('sendMessage', $params);
     }
 
     public function sendPhoto($chat_id, $file, $caption = '') {
